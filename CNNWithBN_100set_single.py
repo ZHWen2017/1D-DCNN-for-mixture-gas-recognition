@@ -2,8 +2,9 @@ import tensorflow as tf
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import  os,time
+import  os
 from sklearn.metrics import roc_auc_score, accuracy_score
+import time
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -83,7 +84,7 @@ def batch_normal(xs, n_out, ph_train):
         xs_norm = tf.nn.batch_normalization(xs, mean, var, beta, gamma, epsilon)
     return xs_norm
 
-def CNN_process(hold_i, Max_steps, gas_train, gas_test):
+def CNN_process(hold_i, Max_steps, gas_train, gas_test, hidden_nums):
 
     g1 = tf.Graph()
     with g1.as_default():
@@ -122,7 +123,7 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
                 conv1_bn = batch_normal(conv1, 8, phase_train)
                 conv1_out = tf.nn.relu(conv1_bn)
 
-                print_activation(conv1_out)
+                # print_activation(conv1_out)
 
                 # axis = list(range(len(conv1.get_shape()) - 1))
                 # mean1, vars1 = tf.nn.moments(conv1, axis)
@@ -147,7 +148,7 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
         c14, w14, b14 = Conv(X_holder14)
         c15, w15, b15 = Conv(X_holder15)
         Conv1 = tf.concat([c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15], axis=3)
-        print_activation(Conv1)
+        # print_activation(Conv1)
 
         with tf.name_scope('Conv2') as scope:
             # weight2 = tf.Variable(tf.random_uniform(shape=[1, 3, 256, 256], minval=-1, maxval=1), trainable=True)
@@ -166,7 +167,7 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
             #     Conv2 = tf.nn.dropout(Conv2, 0.25)
             Conv2_bn = batch_normal(Conv2, 64, phase_train)
             Conv2_out = tf.nn.relu(Conv2_bn)
-            print_activation(Conv2_out)
+            # print_activation(Conv2_out)
             # pool2 = tf.nn.avg_pool(conv2, [1, 1, 2, 1], [1, 1, 2, 1], 'VALID')
 
 
@@ -186,7 +187,7 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
                 Conv3 = tf.nn.dropout(Conv3, 0.25)
             Conv3_bn = batch_normal(Conv3, 64, phase_train)
             Conv3_out = tf.nn.relu(Conv3_bn)
-            print_activation(Conv3_out)
+            # print_activation(Conv3_out)
 
             # pool = tf.nn.dropout(pool, 0.9)
 
@@ -209,7 +210,7 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
             conv_out = tf.nn.relu(conv_bn)
             # print_activation(conv_)
             pool_ = tf.nn.avg_pool(conv_out,[1, 1, 4, 1], [1, 1, 3, 1], 'VALID')
-            print_activation(pool_)
+            # print_activation(pool_)
 
         # #     print_activation(conv_)
 
@@ -246,13 +247,13 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
             # weight5 = tf.Variable(xavier_init([256, 128], 50, 100))
             # weight5 = tf.get_variable("weight5", shape=[256, 128],
             #                           initializer=tf.contrib.layers.xavier_initializer(seed=1))
-            weight5 = tf.get_variable("weight5", shape=[64, 32],
+            weight5 = tf.get_variable("weight5", shape=[64, hidden_nums],
                                       initializer=tf.glorot_uniform_initializer())
-            bias5 = tf.Variable(tf.constant(0.0, shape=[32]), trainable=True)
+            bias5 = tf.Variable(tf.constant(0.0, shape=[hidden_nums]), trainable=True)
             fc2 = (tf.matmul(fc1_out, weight5) + bias5)
             if phase_train == True:
                 fc2 = tf.nn.dropout(fc2, 0.25)
-            fc2_bn = batch_normal(fc2, 32, phase_train)
+            fc2_bn = batch_normal(fc2, hidden_nums, phase_train)
             # print_activation(fc2)
             fc2_out = tf.nn.relu(fc2_bn)
 
@@ -261,15 +262,15 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
             # weight_ = tf.Variable(xavier_init([128, 3], 50, 100), trainable=True)
             # weight_ = tf.get_variable("weight_", shape=[128, 3],
             #                           initializer=tf.contrib.layers.xavier_initializer(seed=1))
-            weight_ = tf.get_variable("weight_", shape=[32, 3],
+            weight_ = tf.get_variable("weight_", shape=[hidden_nums, 3],
                                       initializer=tf.glorot_uniform_initializer())
             # weight5 = get_weight([1024, 5], REGULARAZTION_RATE)
 
             bias_ = tf.Variable(tf.constant(0.001, shape=[3]))
             logits = (tf.matmul(fc2_out, weight_) + bias_)
-            if phase_train == True:
-                logits = tf.nn.dropout(logits, 0.5)
-            logits = batch_normal(logits, 3, phase_train)
+            # if phase_train == True:
+            #     logits = tf.nn.dropout(logits, 0.5)
+            # logits = batch_normal(logits, 3, phase_train)
             # print(logits)
             output = tf.nn.sigmoid(logits)
             predictions = tf.round(output)
@@ -317,8 +318,9 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
         acc_best = 0
         epochElec = 0
         sess.run(tf.global_variables_initializer())
+        print("Multi-label process....")
         for epoch in range(Max_steps):
-
+            start_time = time.time()
             gas_batch, label_batch = gen_batch(gas_train['gas'], gas_train['label'], Batch_size)
 
             # print(gas_batch.shape)
@@ -331,11 +333,9 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
                          y_holder:label_batch, phase_train: True}
             # print(sess.run(conv0, feed_dict=feed_dict).shape)
             sess.run(train_step, feed_dict=feed_dict)
-
+            duration = time.time() - start_time
             y_train, loss= sess.run([predictions, cross_entropy], feed_dict=feed_dict)
-            start = time.time()
             y_test, loss_test = sess.run([predictions, cross_entropy], feed_dict=feed_dict1)
-            test_end = time.time()
             # print(y_train)
             test_count = 0
             train_count = 0
@@ -350,7 +350,7 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
             # test_auc, test_auc_mean = metric(test_out, test_label_batch)
             acc_test, test_acc_mean = metric_acc(y_test, test_label_batch)
 
-            form0 = [epoch, loss, loss_test, test_count, accuracy_train, accuracy_test, (test_end-start)/len(y_test)]
+            form0 = [epoch, loss, loss_test, test_count, accuracy_train, accuracy_test]
             losses.append(loss)
             # test_aucs.append(test_auc_mean)
             test_acc_per.append(acc_test)
@@ -359,8 +359,9 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
             test_losses.append(loss_test)
             train_accs.append(accuracy_train)
             if epoch % 5 == 0:
-                print('Epoch #{}, Training loss = {:.4f}, test loss={:.4f}, '
-                      'correct count = {:.1f}, train accuracy = {:.5f}, vaild accuracy = {:.5f}, each sample vailding cost {:.5f}'.format(*form0))
+                print("\r{} steps are processing".format(epoch+5), end=" ")
+            #     print('Epoch #{}, Training loss = {:.4f}, test loss={:.4f}, '
+            #           'correct count = {:.1f}, train accuracy = {:.5f}, vaild accuracy = {:.5f}'.format(*form0))
                 # print('acc_per: ', acc_test)
             # print(train_acc)
             # print('The training set sigmoid output: \n', y_train)
@@ -370,11 +371,10 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
                 epochElec = epoch
                 # print('model updated')
 
-
         # print('Epoch #{}, Training loss = {:.4f}, test loss={:.4f}, test_mean_auc = {:.5f}, '
         #       'correct count = {:.1f}, vaild accuracy = {:.5f}'.format(*form0))
         # saver.save(sess, ckpt_dir + '/model.ckpt')
-    test_acc_per = np.array(test_acc_per)
-    print('\nFold %d, the best test accuracy(auc): %.5f, best loss: %.4f, epoch: %d' %(hold_i, acc_best, test_losses[int(epochElec)], epochElec))
-    return valid_accs, acc_best, test_losses[int(epochElec)], losses, test_losses, train_accs
+            last_batch_time = float(duration)
+    print('The last batch costs %fs, the best test accuracy(auc): %.5f, best loss: %.4f, epoch: %d' %(last_batch_time, acc_best, test_losses[int(epochElec)], epochElec))
+    return valid_accs, acc_best, test_losses[int(epochElec)], losses, test_losses, train_accs, last_batch_time
     # return acc_best, test_losses[int(epochElec)]

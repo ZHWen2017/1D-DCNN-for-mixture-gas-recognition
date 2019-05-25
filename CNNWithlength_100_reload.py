@@ -2,11 +2,9 @@ import tensorflow as tf
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-import  os,time
+import  os
 from sklearn.metrics import roc_auc_score, accuracy_score
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 Batch_size = 64
 Max_steps = 5000
 Learning_rate = 1e-4
@@ -83,7 +81,7 @@ def batch_normal(xs, n_out, ph_train):
         xs_norm = tf.nn.batch_normalization(xs, mean, var, beta, gamma, epsilon)
     return xs_norm
 
-def CNN_process(hold_i, Max_steps, gas_train, gas_test):
+def CNN_process_reload(gas_test):
 
     g1 = tf.Graph()
     with g1.as_default():
@@ -192,7 +190,7 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
 
         #
         with tf.name_scope('Conv4') as scope:
-            # weight3 = get_weight([1, 3, 512, 512], REGULARAZTION_RATE)
+       # weight3 = get_weight([1, 3, 512, 512], REGULARAZTION_RATE)
             # weight_ = tf.Variable(tf.random_uniform(shape=[1, 2, 256, 512], minval=-1, maxval=1, dtype=tf.float32),trainable=True)
             # weight_1 = tf.Variable(xavier_init([1, 3, 128, 256], 100, 50), trainable=True)
             # weight_1 = tf.get_variable("weight_1", shape=[1, 3, 128, 256],
@@ -301,80 +299,15 @@ def CNN_process(hold_i, Max_steps, gas_train, gas_test):
                           y_holder: test_label_batch, phase_train: False}
 
     # print(feed_dict1[X_holder1],feed_dict1[X_holder12])
-    init = tf.global_variables_initializer()
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
-    config = tf.ConfigProto(gpu_options=gpu_options)
-    config.gpu_options.allow_growth = True
-
-    with tf.Session(graph=g1, config=config) as sess:
-        losses = []
-        train_aucs = []
-        test_losses = []
-        test_aucs = []
-        test_acc_per = []
-        valid_accs = []
-        train_accs = []
-        acc_best = 0
-        epochElec = 0
-        sess.run(tf.global_variables_initializer())
-        for epoch in range(Max_steps):
-
-            gas_batch, label_batch = gen_batch(gas_train['gas'], gas_train['label'], Batch_size)
-
-            # print(gas_batch.shape)
-            feed_dict = {X_holder0:gas_batch[:, 0:1, :, :], X_holder1:gas_batch[:, 1:2, :, :], X_holder2:gas_batch[:, 2:3, :, :],
-                         X_holder3: gas_batch[:, 3:4, :, :], X_holder4:gas_batch[:, 4:5, :, :],X_holder5:gas_batch[:, 5:6, :, :],
-                         X_holder6:gas_batch[:, 6:7, :, :], X_holder7:gas_batch[:, 7:8, :, :],
-                         X_holder8: gas_batch[:, 8:9, :, :], X_holder9: gas_batch[:, 9:10, :, :],
-                         X_holder10: gas_batch[:, 10:11, :, :], X_holder11: gas_batch[:, 11:12, :, :], X_holder12: gas_batch[:, 12:13, :, :],
-                         X_holder13: gas_batch[:, 13:14, :, :], X_holder14: gas_batch[:, 14:15, :, :], X_holder15: gas_batch[:, 15:16, :, :],
-                         y_holder:label_batch, phase_train: True}
-            # print(sess.run(conv0, feed_dict=feed_dict).shape)
-            sess.run(train_step, feed_dict=feed_dict)
-
-            y_train, loss= sess.run([predictions, cross_entropy], feed_dict=feed_dict)
-            start = time.time()
-            y_test, loss_test = sess.run([predictions, cross_entropy], feed_dict=feed_dict1)
-            test_end = time.time()
-            # print(y_train)
-            test_count = 0
-            train_count = 0
-            for i in range(len(y_test)):
-                if (y_test[i] == test_label_batch[i]).all():
-                    test_count += 1
-            for j in range(len(y_train)):
-                if (y_train[j] == label_batch[j]).all():
-                    train_count+=1
-            accuracy_train = train_count / len(y_train)
-            accuracy_test = test_count / len(y_test)
-            # test_auc, test_auc_mean = metric(test_out, test_label_batch)
-            acc_test, test_acc_mean = metric_acc(y_test, test_label_batch)
-
-            form0 = [epoch, loss, loss_test, test_count, accuracy_train, accuracy_test, (test_end-start)/len(y_test)]
-            losses.append(loss)
-            # test_aucs.append(test_auc_mean)
-            test_acc_per.append(acc_test)
-            valid_accs.append(accuracy_test)
-            # train_aucs.append(AUC_train)
-            test_losses.append(loss_test)
-            train_accs.append(accuracy_train)
-            if epoch % 5 == 0:
-                print('Epoch #{}, Training loss = {:.4f}, test loss={:.4f}, '
-                      'correct count = {:.1f}, train accuracy = {:.5f}, vaild accuracy = {:.5f}, each sample vailding cost {:.5f}'.format(*form0))
-                # print('acc_per: ', acc_test)
-            # print(train_acc)
-            # print('The training set sigmoid output: \n', y_train)
-            if accuracy_test >= acc_best:
-                acc_best = accuracy_test
-                saver.save(sess, ckpt_dir+'/BNmodel.ckpt')
-                epochElec = epoch
-                # print('model updated')
-
-
-        # print('Epoch #{}, Training loss = {:.4f}, test loss={:.4f}, test_mean_auc = {:.5f}, '
-        #       'correct count = {:.1f}, vaild accuracy = {:.5f}'.format(*form0))
-        # saver.save(sess, ckpt_dir + '/model.ckpt')
-    test_acc_per = np.array(test_acc_per)
-    print('\nFold %d, the best test accuracy(auc): %.5f, best loss: %.4f, epoch: %d' %(hold_i, acc_best, test_losses[int(epochElec)], epochElec))
-    return valid_accs, acc_best, test_losses[int(epochElec)], losses, test_losses, train_accs
-    # return acc_best, test_losses[int(epochElec)]
+    with tf.Session(graph=g1) as sess:
+        saver.restore(sess, ckpt_dir + "/BNmodel.ckpt")
+        y_test, loss_test, final_feature = sess.run([predictions, cross_entropy, flatten], feed_dict=feed_dict1)
+        test_count = 0
+        # print(y_test[:10])
+        for i in range(len(y_test)):
+            if (y_test[i] == test_label_batch[i]).all():
+                test_count += 1.0
+        accuracy_test = float(test_count / len(y_test))
+        print('test_accuracy = {:.5f}, test_loss = {:.5f}'.format(accuracy_test, loss_test))
+	#print('final feature shape: ', np.shape(final_feature))
+    return  accuracy_test, loss_test, final_feature
